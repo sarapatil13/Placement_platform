@@ -1,0 +1,104 @@
+# ---------------------------------------------------------------------------
+# Placement Platform — root .gitignore
+# ---------------------------------------------------------------------------
+
+# --- Environment / secrets --------------------------------------------------
+# Never commit real credentials. .env.example (and other example files) are
+# intentionally kept as documentation and must stay tracked.
+.env
+.env.*
+.envrc
+!.env.example
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Test / lint / type-check caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+.hypothesis/
+
+# --- Databases & uploaded content --------------------------------------------
+# pytest scratch DBs, local application DBs, and every uploaded artifact
+# (resumes, job descriptions) live under storage/. None of it belongs in git.
+storage/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Node / frontend ---------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.lerna/
+.vite/
+
+# Frontend build output and incremental type-check caches
+frontend/dist/
+*.tsbuildinfo
+
+# --- Logs & generated artifacts ----------------------------------------------
+logs/
+*.log
+log/
+tmp/
+.venv/
+coverage.xml
+
+# --- IDE / editor / OS -------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Docker / misc ------------------------------------------------------------
+.docker/
+.dockerignore.local
+
+# Keep empty working directories meaningful (create a .gitkeep alongside the
+# file it documents if a directory must persist in git).
