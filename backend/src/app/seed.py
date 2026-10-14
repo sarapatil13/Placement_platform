@@ -49,7 +49,7 @@ from app.services.applications import ApplicationService
 from app.services.resumes import upload_resume
 from app.services.users import get_user_by_email, init_institution
 
-ADMIN_EMAIL = settings.seed_admin_email or "admin@kle.local"
+ADMIN_EMAIL = settings.seed_admin_email or "admin@kletech.example.edu"
 
 
 def seed_credentials() -> tuple[str, str]:
@@ -436,7 +436,7 @@ def _ensure_company(db: Session, inst_id: str, spec: dict) -> Company:
 
 def _edu_email(spec: dict) -> str:
     first, last = spec["name"].lower().split(" ", 1)
-    return f"{first}.{last.replace(' ', '').replace('-', '')}@student.kle.local"
+    return f"{first}.{last.replace(' ', '').replace('-', '')}@student.kletech.example.edu"
 
 
 def _ensure_student(db: Session, inst_id: str, spec: dict, student_password: str) -> bool:

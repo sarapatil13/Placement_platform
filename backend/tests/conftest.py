@@ -16,6 +16,10 @@ SRC_DIR = BACKEND_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+# The storage/ directory is gitignored, so it is absent on a fresh clone; the
+# sqlite scratch DB below lives inside it. Create it before the engine connects.
+(BACKEND_DIR / "storage").mkdir(parents=True, exist_ok=True)
+
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DATABASE_URL"] = (
     "sqlite:///" + (BACKEND_DIR / "storage" / "test_placement.db").as_posix()

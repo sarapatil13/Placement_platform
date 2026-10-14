@@ -178,7 +178,7 @@ class Settings(BaseSettings):
     # Optional overrides for the demo seeder. When unset, the seeder generates
     # a random password during seeding and prints it for the first run. Seeding
     # is refused entirely in production regardless of these values.
-    seed_admin_email: str = "admin@kle.local"
+    seed_admin_email: str = "admin@kletech.example.edu"
     seed_admin_password: str = ""
     seed_student_password: str = ""
 
