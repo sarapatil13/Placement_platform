@@ -96,7 +96,7 @@ Eligibility check: reuse `evaluate`/admission eligibility logic for the student 
 
 ## 6. Round-wise Roadmap (Focus Skills per Round)
 
-**Planned (Package B):** extend `build_prep_roadmap` to also return `rounds`.
+**Implemented (Package B):** `build_prep_roadmap` also returns `rounds`.
 
 Inputs/outputs (current roadmap dict): has `drive_id`, `priority_skills`, `roadmap_steps`, `suggested_practice`, `skill_gaps`, `disclaimer`. New key `rounds`.
 

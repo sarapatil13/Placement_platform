@@ -12,6 +12,7 @@ from app.db.models import (
     DRIVE_DRAFT,
     DRIVE_PUBLISHED,
     AIAnalysis,
+    DriveRound,
     DriveSkill,
     EligibilityCriterion,
     PlacementDrive,
@@ -235,6 +236,57 @@ def upload_jd_and_suggest(
 
 def settings_max_upload() -> int:
     return 5 * 1024 * 1024
+
+
+def list_rounds(db: Session, *, drive: PlacementDrive) -> list[DriveRound]:
+    return (
+        db.query(DriveRound)
+        .filter(DriveRound.drive_id == drive.id)
+        .order_by(DriveRound.position.asc())
+        .all()
+    )
+
+
+def replace_rounds(
+    db: Session,
+    *,
+    drive: PlacementDrive,
+    rounds: list[dict],
+    actor_ctx: AuditContext | None = None,
+) -> list[DriveRound]:
+    seen_positions: set[int] = set()
+    seen: list[DriveRound] = []
+    for item in rounds:
+        position = int(item["position"])
+        if position in seen_positions:
+            raise ValidationError(f"Duplicate round position {position}.")
+        seen_positions.add(position)
+        seen.append(
+            DriveRound(
+                institution_id=drive.institution_id,
+                drive_id=drive.id,
+                position=position,
+                round_type=item["round_type"],
+                title=item["title"],
+                topics=[str(t) for t in (item.get("topics") or [])],
+                scheduled_at=item.get("scheduled_at"),
+            )
+        )
+    db.query(DriveRound).filter(DriveRound.drive_id == drive.id).delete()
+    db.flush()
+    db.add_all(seen)
+    db.flush()
+    record(
+        db,
+        action="drive.rounds_updated",
+        context=actor_ctx,
+        entity_type="drive",
+        entity_id=drive.id,
+        detail={"round_count": len(seen)},
+    )
+    db.commit()
+    db.refresh(drive)
+    return seen
 
 
 def _persist_jd_analysis(db: Session, drive: PlacementDrive, result, raw: dict) -> None:

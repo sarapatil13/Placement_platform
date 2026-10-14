@@ -2,15 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, httpError } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
-import type { ApplicationRead, DriveEligibilityCheck, DriveRead } from "../../api/types";
+import type { ApplicationRead, DriveEligibilityCheck, DriveRead, DriveRound } from "../../api/types";
 import { Alert, Badge, Button, Card, PageLoader, Select, Tag } from "../../components/ui";
 import { PageHeader } from "../../components/Layout";
+import { ROUND_TYPE_LABELS } from "../../components/DriveRoundsEditor";
 
 export default function DriveDetail() {
   const { driveId } = useParams<{ driveId: string }>();
   const { user } = useAuth();
   const [drive, setDrive] = useState<DriveRead | null>(null);
   const [eligibility, setEligibility] = useState<DriveEligibilityCheck | null>(null);
+  const [rounds, setRounds] = useState<DriveRound[]>([]);
   const [myApp, setMyApp] = useState<ApplicationRead | null>(null);
   const [resumes, setResumes] = useState<{ id: string; filename: string; is_primary: boolean }[]>([]);
   const [resumeId, setResumeId] = useState("");
@@ -29,14 +31,16 @@ export default function DriveDetail() {
   const loadAll = useCallback(async () => {
     if (!driveId) return;
     try {
-      const [driveResp, eligResp, appResp] = await Promise.all([
+      const [driveResp, eligResp, appResp, roundsResp] = await Promise.all([
         api.get<DriveRead>(`/drives/${driveId}`),
         api.get<DriveEligibilityCheck>(`/drives/${driveId}/eligibility`),
         api.get<ApplicationRead[]>(`/applications/drive/${driveId}`),
+        api.get<DriveRound[]>(`/drives/${driveId}/rounds`),
       ]);
       setDrive(driveResp.data);
       setEligibility(eligResp.data);
       setMyApp(appResp.data[0] ?? null);
+      setRounds(roundsResp.data);
     } catch (err) {
       setError(await httpError(err).then((e) => e.message));
     }
@@ -141,6 +145,29 @@ export default function DriveDetail() {
           ))}
         </div>
       </Card>
+
+      {rounds.length > 0 ? (
+        <Card title="Interview process">
+          <ol className="mb-0" style={{ paddingLeft: 18 }}>
+            {rounds.map((r) => (
+              <li key={r.id} style={{ marginBottom: 10 }}>
+                <strong>{r.title || ROUND_TYPE_LABELS[r.round_type]}</strong>{" "}
+                <Tag tone="neutral">{ROUND_TYPE_LABELS[r.round_type]}</Tag>
+                {r.scheduled_at ? (
+                  <span className="muted"> · {new Date(r.scheduled_at).toLocaleString()}</span>
+                ) : null}
+                {r.topics.length > 0 ? (
+                  <div className="skill-chips" style={{ marginTop: 4 }}>
+                    {r.topics.map((t) => (
+                      <Tag key={t}>{t}</Tag>
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        </Card>
+      ) : null}
 
       <Card title="Eligibility">
         {eligibility ? (

@@ -20,6 +20,7 @@ from app.db.session import get_db
 from app.schemas.drives import (
     DriveEligibilityCheck,
     DriveRead,
+    DriveRoundOut,
     EligibilityRuleOut,
     PaginatedDrives,
 )
@@ -103,6 +104,21 @@ def get_drive(
     if drive.status not in _VISIBLE_STATUSES:
         raise NotFoundError("Drive not found.")
     return _to_drive_read(drive)
+
+
+@router.get("/{drive_id}/rounds", response_model=list[DriveRoundOut])
+def list_rounds(
+    drive_id: str,
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[DriveRoundOut]:
+    drive = drive_service.get_drive(db, drive_id, current.institution_id)
+    if drive.status not in _VISIBLE_STATUSES:
+        raise NotFoundError("Drive not found.")
+    return [
+        DriveRoundOut.model_validate(r)
+        for r in drive_service.list_rounds(db, drive=drive)
+    ]
 
 
 @router.get("/{drive_id}/eligibility", response_model=DriveEligibilityCheck)

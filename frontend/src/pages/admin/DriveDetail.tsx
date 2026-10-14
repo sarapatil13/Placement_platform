@@ -4,12 +4,14 @@ import { api, httpError } from "../../api/client";
 import type {
   BulkEvaluateResult,
   DriveRead,
+  DriveRoundIn,
   EligibilityRuleIn,
   JDExtractionSuggestion,
 } from "../../api/types";
 import { Alert, Badge, Button, Card, Field, Input, PageLoader, Select, Tag, Textarea } from "../../components/ui";
 import { PageHeader } from "../../components/Layout";
 import { DriveCriteriaEditor } from "../../components/DriveCriteriaEditor";
+import { DriveRoundsEditor } from "../../components/DriveRoundsEditor";
 import { criterionLabel } from "../../lib/criteria";
 
 interface EditForm {
@@ -47,6 +49,7 @@ export default function AdminDriveDetail() {
   const [drive, setDrive] = useState<DriveRead | null>(null);
   const [form, setForm] = useState<EditForm | null>(null);
   const [criteria, setCriteria] = useState<EligibilityRuleIn[]>([]);
+  const [rounds, setRounds] = useState<DriveRoundIn[]>([]);
   const [suggestion, setSuggestion] = useState<JDExtractionSuggestion | null>(null);
   const [jdFilename, setJdFilename] = useState<string | null>(null);
   const [evaluation, setEvaluation] = useState<BulkEvaluateResult | null>(null);
@@ -62,13 +65,26 @@ export default function AdminDriveDetail() {
   async function load() {
     if (!driveId) return;
     try {
-      const { data } = await api.get<DriveRead>(`/drives/${driveId}`);
+      const [driveResp, roundsResp] = await Promise.all([
+        api.get<DriveRead>(`/drives/${driveId}`),
+        api.get<{ rounds: DriveRoundIn[] }>(`/admin/drives/${driveId}/rounds`),
+      ]);
+      const data = driveResp.data;
       setDrive(data);
       setForm(toForm(data));
       setCriteria(
         data.criteria.map((c) => ({
           criterion_type: c.criterion_type,
           parameters: c.parameters,
+        })),
+      );
+      setRounds(
+        roundsResp.data.rounds.map((r) => ({
+          position: r.position,
+          round_type: r.round_type,
+          title: r.title,
+          topics: r.topics,
+          scheduled_at: r.scheduled_at,
         })),
       );
     } catch (err) {
@@ -120,6 +136,26 @@ export default function AdminDriveDetail() {
         .filter(Boolean) ?? [];
       await api.patch(`/admin/drives/${driveId}`, { criteria, required_skills: skills });
       setSuccess("Eligibility criteria saved.");
+      await load();
+    } catch (err) {
+      setError(await httpError(err).then((e) => e.message));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveRounds() {
+    if (!driveId) return;
+    setBusy("rounds");
+    setError(null);
+    setSuccess(null);
+    try {
+      const payload = rounds.map((r) => ({
+        ...r,
+        scheduled_at: r.scheduled_at ? new Date(r.scheduled_at).toISOString() : undefined,
+      }));
+      await api.put(`/admin/drives/${driveId}/rounds`, { rounds: payload });
+      setSuccess("Interview rounds saved.");
       await load();
     } catch (err) {
       setError(await httpError(err).then((e) => e.message));
@@ -331,6 +367,15 @@ export default function AdminDriveDetail() {
         <div className="form-actions">
           <Button variant="secondary" onClick={saveCriteria} disabled={busy === "criteria"}>
             {busy === "criteria" ? "Saving…" : "Save criteria"}
+          </Button>
+        </div>
+      </Card>
+
+      <Card title="Interview rounds">
+        <DriveRoundsEditor value={rounds} onChange={setRounds} />
+        <div className="form-actions">
+          <Button variant="secondary" onClick={saveRounds} disabled={busy === "rounds"}>
+            {busy === "rounds" ? "Saving…" : "Save rounds"}
           </Button>
         </div>
       </Card>

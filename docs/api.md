@@ -33,9 +33,9 @@ Schemas: `StudentDetail`, `StudentSelfUpdate`, `SkillRead`, `SkillUpsert`.
 | GET | `/drives` | Authenticated | List published/closed drives (paginated; institution-scoped) |
 | GET | `/drives/{drive_id}` | Authenticated | Get drive details if published/closed |
 | GET | `/drives/{drive_id}/eligibility` | Student | Check eligibility for the drive (returns verdict with reasons) |
-| GET | `/drives/{drive_id}/rounds` | Authenticated (student-visible) | List recruitment rounds for drive (order by position) — planned in Package B |
+| GET | `/drives/{drive_id}/rounds` | Authenticated (student-visible) | List recruitment rounds for drive (ordered by position) |
 
-Schemas: `DriveRead`, `PaginatedDrives`, `DriveEligibilityCheck`, `EligibilityRuleOut`.
+Schemas: `DriveRead`, `PaginatedDrives`, `DriveEligibilityCheck`, `EligibilityRuleOut`, `DriveRoundOut`.
 
 ## resumes (`/resumes`)
 
@@ -46,7 +46,7 @@ Schemas: `DriveRead`, `PaginatedDrives`, `DriveEligibilityCheck`, `EligibilityRu
 | POST | `/resumes/analyze` | Authenticated (student) | Analyze resume against drive (drive_id required); returns skill match, gaps, feedback |
 | POST | `/resumes/{resume_id}/set-primary` | Authenticated (student) | Set resume as primary |
 | DELETE | `/resumes/{resume_id}` | Authenticated (student) | Delete resume (reassigns primary if deleted was primary) |
-| POST | `/resumes/{drive_id}/roadmap` | Authenticated (student) | Generate preparation roadmap for drive; returns priority skills, steps, practice, skill gaps, disclaimer (includes `rounds` in Package B) |
+| POST | `/resumes/{drive_id}/roadmap` | Authenticated (student) | Generate preparation roadmap for drive; returns priority skills, steps, practice, skill gaps, per-round focus skills, disclaimer |
 
 Schemas: `ResumeDetail`, `ResumeUploadResponse`, `ResumeMetadata`, `ResumeAnalysisResult`, `PreparationRoadmap`.
 
@@ -99,7 +99,8 @@ Schemas: `NotificationRead`, `PaginatedNotifications`, `NotificationMarkRead`.
 | POST | `/admin/drives/{drive_id}/jd` | Admin (UPLOAD_JD) | Upload JD (multipart); extracts/suggests criteria/skills, sets AI extraction pending |
 | POST | `/admin/drives/{drive_id}/jd/confirm` | Admin (CONFIRM_AI_EXTRACTION) | Confirm JD extraction (criteria + required_skills); marks eligibility confirmed |
 | POST | `/admin/drives/{drive_id}/eligibility/evaluate` | Admin (MANAGE_ELIGIBILITY_CRITERIA) | Bulk evaluate eligibility for all students against drive |
-| PUT | `/admin/drives/{drive_id}/rounds` | Admin (MANAGE_DRIVES or appropriate) | Replace drive rounds list (admin only, tenant-scoped, audit logged) — Package B |
+| GET | `/admin/drives/{drive_id}/rounds` | Admin (MANAGE_DRIVES) | List drive rounds (ordered by position) |
+| PUT | `/admin/drives/{drive_id}/rounds` | Admin (MANAGE_DRIVES) | Replace drive rounds list (tenant-scoped, audit logged) |
 
 ### applications
 | Method | Path | Role | Purpose |

@@ -2,32 +2,29 @@
 
 ## Block Diagram (High-level)
 
-```text
-User (Browser)
-  │
-  ▼
-Frontend (Vite/React/TS) — components/pages/lib/api
-  │ HTTP (REST, JSON) + Vite proxy /api → :8000
-  ▼
-FastAPI (app.main) — CORS, rate limiting, lifespan, error handlers
-  │
-  ▼
-API Routers (v1): auth, students, drives, resumes, applications, notifications, admin
-  │
-  ▼
-Services (layer): users, students, drives, eligibility, resumes, applications, documents, skill_matching, ai_service, tokens, notifications, analytics, audit
-  │
-  ▼
-DB/ORM: SQLAlchemy models + Alembic migrations (SQLite dev / PostgreSQL prod)
-  │
-  ▼
-Storage: uploads under UPLOAD_DIR/<institution>/<student>/<sha256+ext>
-  │
-  ▼
-AI Providers: heuristic (default, offline) | openai_compatible | anthropic (advisory; deterministic fallback on errors)
-  │
-  ▼
-Core: config/settings, RBAC, security (JWT/crypto), logging (structlog), errors, rate limiting
+```mermaid
+flowchart TD
+    U[User / Browser]
+    FE["Frontend (Vite + React + TS)<br/>pages / components / lib / api"]
+    API["FastAPI app.main<br/>CORS, rate limiting, lifespan, error handlers"]
+    ROUTERS["API Routers v1<br/>auth · students · drives · resumes · applications · notifications · admin"]
+    SERVICES["Service layer<br/>users · students · drives · eligibility · resumes · applications<br/>documents · skill_matching · ai_service · tokens · notifications · analytics · audit"]
+    DB["DB / ORM<br/>SQLAlchemy models + Alembic migrations<br/>SQLite dev / PostgreSQL prod"]
+    STORE["Storage<br/>UPLOAD_DIR/&lt;institution&gt;/&lt;student&gt;/&lt;sha256+ext&gt;"]
+    AI["AI Providers<br/>heuristic (default, offline) · openai_compatible · anthropic<br/>advisory only; deterministic fallback on errors"]
+    CORE["Core<br/>config · RBAC · security (JWT/crypto) · logging · errors · rate limiting"]
+
+    U --> FE
+    FE -->|"REST / JSON · Vite proxy /api → :8000"| API
+    API --> ROUTERS
+    ROUTERS --> SERVICES
+    SERVICES --> DB
+    SERVICES --> STORE
+    SERVICES --> AI
+    ROUTERS -.->|uses| AI
+    DB --- CORE
+    SERVICES --- AI
+    API --> AI
 ```
 
 ## Key Components
@@ -36,108 +33,204 @@ Core: config/settings, RBAC, security (JWT/crypto), logging (structlog), errors,
 - **AuthN/Z**: JWT access/refresh with rotation + server-side denylist (JTI). httpOnly refresh cookie (SameSite=Strict), CSRF header for cookie-based refresh. RBAC via `Permission` enum per route.
 - **Deterministic-first**: Eligibility evaluation is pure code. AI calls are advisory; all AI failures degrade to deterministic fallbacks.
 - **Append-only history**: Application status history and audit log are never updated/deleted.
-- **Tenant-scoped storage**: Resume/JD files stored under institution/student hierarchy with content-addressed names (sha256 prefix) and extension whitelists.
+- **Tenant-scoped storage**: Resume/JD files stored under an institution/student hierarchy with content-addressed names (sha256 prefix) and extension whitelists.
+- **Interview rounds**: A drive owns an ordered list of `DriveRound` rows (online assessment, technical/HR interviews, group discussion, other), editable by admins and read by students; prep-roadmap focus skills are derived from round topics.
 
 ## Class Diagram (Models, high-level)
 
-```text
-Institution (1) ──< Department (N)
-              ──< User (N)
-              ──< Company (N)
-              ──< PlacementDrive (N) ──< EligibilityCriterion (N)
-                                     ──< DriveSkill (N)
-                                     ──< Application (N)
-User (1) ──o Student (1)
-Student (1) ──< StudentSkill (N) >── Skill (N)
-           ──< Resume (N)
-           ──< Application (N)
-Skill (1) ──< DriveSkill (N)
-Company (1) ──< PlacementDrive (N)
-Application (1) ──< ApplicationStatusHistory (N)
-User (1) ──< Notification (N)  (user_id)
-AIAnalysis: links to student/drive/resume/application (optional FKs)
-AuditLog: institution/actor optional
-RevokedRefreshToken: user_id + jti_hash (unique)
+```mermaid
+classDiagram
+    Institution "1" --> "N" Department
+    Institution "1" --> "N" User
+    Institution "1" --> "N" Company
+    Institution "1" --> "N" PlacementDrive
+    Company "1" --> "N" PlacementDrive
+    PlacementDrive "1" --> "N" EligibilityCriterion
+    PlacementDrive "1" --> "N" DriveSkill
+    PlacementDrive "1" --> "N" DriveRound
+    PlacementDrive "1" --> "N" Application
+    User "1" --o "1" Student
+    Student "1" --> "N" StudentSkill
+    Student "1" --> "N" Resume
+    Student "1" --> "N" Application
+    Skill "1" --> "N" StudentSkill
+    Skill "1" --> "N" DriveSkill
+    Application "1" --> "N" ApplicationStatusHistory
+    User "1" --> "N" Notification
+    User "1" --> "N" RevokedRefreshToken
 ```
+
+`AIAnalysis` links optionally to student/drive/resume/application. `AuditLog` references an optional institution/actor.
 
 ## ER Diagram (Core Entities)
 
-```text
-Institution (id, code unique) 1──N Department
-1──N User
-1──N Company
-1──N PlacementDrive (company_id, institution_id)
-1──N AuditLog
+```mermaid
+erDiagram
+    INSTITUTION ||--o{ DEPARTMENT : has
+    INSTITUTION ||--o{ USER : has
+    INSTITUTION ||--o{ COMPANY : has
+    INSTITUTION ||--o{ PLACEMENT_DRIVE : has
+    INSTITUTION ||--o{ AUDIT_LOG : records
+    USER ||--o| STUDENT : "is a"
+    USER ||--o{ NOTIFICATION : receives
+    USER ||--o{ REVOKED_REFRESH_TOKEN : revokes
+    STUDENT ||--o{ RESUME : owns
+    STUDENT }o--o{ SKILL : "via StudentSkill"
+    PLACEMENT_DRIVE }o--o{ SKILL : "via DriveSkill"
+    PLACEMENT_DRIVE ||--o{ DRIVE_ROUND : schedules
+    PLACEMENT_DRIVE ||--o{ APPLICATION : receives
+    APPLICATION ||--o{ APPLICATION_STATUS_HISTORY : logs
 
-User 1──1 Student (user_id)
-Student 1──N Resume
-Student M──N Skill via StudentSkill
-PlacementDrive M──N Skill via DriveSkill
-PlacementDrive 1──N Application
-Application 1──N ApplicationStatusHistory
-User 1──N Notification
+    INSTITUTION {
+        string id PK
+        string code UK
+    }
+    PLACEMENT_DRIVE {
+        string id PK
+        string company_id FK
+        string institution_id FK
+        string status
+    }
+    DRIVE_ROUND {
+        string id PK
+        string drive_id FK
+        int position
+        string round_type
+        json topics
+        datetime scheduled_at
+    }
 ```
-
-Crow's foot notation implied (1:N, M:N via junction tables StudentSkill/DriveSkill).
 
 ## Sequence Diagram 1: Student applies to a drive
 
-```text
-Student (Browser) -> API /applications (POST): drive_id, resume_id?, cover_note?
-API -> deps: get_current_user (JWT), get_student_record
-API -> ApplicationService.create(student, drive_id, resume_id, cover_note, resume_snapshot_text)
-ApplicationService -> DB: load drive (published), check duplicate, check deadline
-ApplicationService -> eligibility.evaluate_for_admission(drive_id, student)
-eligibility: evaluate criteria against student (CGPA/backlogs/depts/batch/skills/...)
-eligibility -> return Verdict (eligible/definitive/reasons)
-ApplicationService -> DB: create Application (status=applied, eligibility_snapshot)
-ApplicationService -> DB: create ApplicationStatusHistory (from=null -> applied, student_initiated=true)
-ApplicationService -> notifications.create (application submitted)
-ApplicationService -> commit -> return Application
-API -> return ApplicationRead
+```mermaid
+sequenceDiagram
+    participant S as Student (Browser)
+    participant API as API /applications
+    participant SVC as ApplicationService
+    participant EL as eligibility.evaluate_for_admission
+    participant DB as Database
+
+    S->>API: POST drive_id, resume_id?, cover_note?
+    API->>API: get_current_user (JWT) + get_student_record
+    API->>SVC: create(student, drive_id, resume_id, cover_note, snapshot)
+    SVC->>DB: load drive (published), check duplicate + deadline
+    SVC->>EL: evaluate_for_admission(drive_id, student)
+    EL->>EL: evaluate criteria (CGPA/backlogs/depts/batch/skills)
+    EL-->>SVC: Verdict(eligible, definitive, reasons)
+    SVC->>DB: insert Application(status=applied, eligibility_snapshot)
+    SVC->>DB: insert ApplicationStatusHistory(null -> applied)
+    SVC->>DB: notifications.create(application submitted)
+    SVC->>DB: commit
+    SVC-->>API: Application
+    API-->>S: ApplicationRead
 ```
 
 Notes: eligibility is re-evaluated server-side at creation (client cannot self-declare). Snapshot stored at apply time.
 
 ## Sequence Diagram 2: Admin uploads JD -> confirms criteria -> publishes
 
-```text
-Admin (Browser) -> API /admin/drives/{drive_id}/jd (POST, multipart file)
-API -> deps: require_permission(UPLOAD_JD), enforce content length
-API -> drive_service.upload_jd_and_suggest(drive, filename, data, storage)
-drive_service -> documents.extract_text_from_bytes(data, filename)
-drive_service -> ai_service.suggest_jd_criteria(extracted_text, drive.title)
-ai_service: try provider; on error -> fallback heuristic JD extraction
-ai_service -> return JDSuggestionSchema (required_skills, suggested_min_cgpa, etc.)
-drive_service -> DB: persist JD (jd_text, jd_filename, storage path), set is_ai_extraction_pending=true
-drive_service -> persist AIAnalysis (requires_confirmation=true) if AI used
-API -> return {drive_id, filename, ...suggestion}
+```mermaid
+sequenceDiagram
+    participant A as Admin (Browser)
+    participant API as Admin API
+    participant DS as drive_service
+    participant AI as ai_service
+    participant DB as Database
 
-Admin -> API /admin/drives/{drive_id}/jd/confirm (POST): criteria[], required_skills[]
-API -> deps: require_permission(CONFIRM_AI_EXTRACTION)
-API -> drive_service.confirm_extraction(drive, criteria, required_skills)
-drive_service -> validate criteria
-drive_service -> DB: upsert EligibilityCriterion rows (source ai_suggested_confirmed or admin_manual), set eligibility_confirmed=true/confirmed_by/at, clear pending flag
-drive_service -> audit/log record
-API -> return {confirmed: true}
+    A->>API: POST /admin/drives/{id}/jd (multipart)
+    API->>API: require_permission(UPLOAD_JD) + enforce content length
+    API->>DS: upload_jd_and_suggest(drive, filename, data, storage)
+    DS->>DS: documents.extract_text_from_bytes(data, filename)
+    DS->>AI: suggest_jd_criteria(text, title)
+    AI-->>DS: JDSuggestionSchema (on error: heuristic fallback)
+    DS->>DB: persist JD, set is_ai_extraction_pending=true
+    DS->>DB: persist AIAnalysis(requires_confirmation=true)
+    API-->>A: {drive_id, filename, ...suggestion}
 
-Admin -> API /admin/drives/{drive_id}/publish (POST): criteria? (optional override)
-API -> deps: require_permission(PUBLISH_DRIVE)
-API -> drive_service.publish_drive(drive, criteria?)
-drive_service -> ensure eligibility_confirmed or criteria provided; set status=published, published_at
-drive_service -> DB: update drive, create notifications if applicable (out of scope here)
-API -> return {status: published}
+    A->>API: POST /admin/drives/{id}/jd/confirm criteria[], required_skills[]
+    API->>API: require_permission(CONFIRM_AI_EXTRACTION)
+    API->>DS: confirm_extraction(drive, criteria, required_skills)
+    DS->>DS: validate criteria
+    DS->>DB: upsert EligibilityCriterion rows, set eligibility_confirmed
+    DS->>DB: audit log
+    API-->>A: {confirmed: true}
+
+    A->>API: POST /admin/drives/{id}/publish criteria?
+    API->>API: require_permission(PUBLISH_DRIVE)
+    API->>DS: publish_drive(drive, criteria?)
+    DS->>DB: set status=published, published_at
+    DS->>DB: notifications to eligible students
+    API-->>A: {status: published}
 ```
 
-Notes: AI suggestions require explicit confirmation before publication (eligibility_confirmed is only set on confirm). Deterministic fallback applies if AI provider unavailable.
+Notes: AI suggestions require explicit confirmation before publication (eligibility_confirmed is only set on confirm). Deterministic fallback applies if the AI provider is unavailable.
+
+## Sequence Diagram 3: Admin maintains drive rounds
+
+```mermaid
+sequenceDiagram
+    participant A as Admin (Browser)
+    participant API as Admin API
+    participant DS as drive_service
+    participant DB as Database
+
+    A->>API: PUT /admin/drives/{id}/rounds {rounds:[...]}
+    API->>API: require_permission(MANAGE_DRIVES) + validate round types
+    API->>DS: replace_rounds(drive, rounds)
+    DS->>DS: reject duplicate positions
+    DS->>DB: delete existing rounds, insert new rounds
+    DS->>DB: audit log (drive.rounds_updated)
+    API-->>A: {drive_id, rounds:[...]}
+```
+
+Students read the same list (ordered by `position`) via `GET /drives/{id}/rounds`, and the list feeds per-round `focus_skills` in the preparation roadmap.
 
 ## Use-Case Diagram (core actors)
 
-```text
-Actors: Student, PlacementAdmin (placement cell), System (scheduler/automations)
+```mermaid
+flowchart LR
+    subgraph Actors
+        ST([Student])
+        PA([Placement Admin])
+        SY([System])
+    end
 
-Use cases:
-Student: login/change password, view/update own profile/skills, list/view drives, check eligibility, upload/manage resumes, analyze resume vs drive, get prep roadmap, apply to drive, view/withdraw applications, view/mark notifications
-PlacementAdmin: import students, manage students (institutional fields), manage companies, create/update drives, upload JD, confirm extraction, publish drive, manage criteria, evaluate eligibility (bulk), view/manage applications (update status), view analytics, view audit log
-System: enforce RBAC/rate limits, JWT rotation/denylist, audit logging, storage validation, deterministic eligibility, AI fallback
+    subgraph Student use cases
+        S1[Login / change password]
+        S2[Manage profile + skills]
+        S3[Browse drives]
+        S4[Check eligibility]
+        S5[Manage resumes]
+        S6[Analyze resume vs drive]
+        S7[Prep roadmap]
+        S8[Apply / withdraw]
+        S9[Notifications]
+    end
+
+    subgraph Admin use cases
+        A1[Import students]
+        A2[Manage institutional data]
+        A3[Manage companies]
+        A4[Create / update drives]
+        A5[Upload JD + confirm]
+        A6[Manage rounds]
+        A7[Publish drive]
+        A8[Evaluate eligibility]
+        A9[Manage applications]
+        A10[Analytics + audit log]
+    end
+
+    subgraph System use cases
+        Y1[Enforce RBAC / rate limits]
+        Y2[JWT rotation / denylist]
+        Y3[Audit logging]
+        Y4[Storage validation]
+        Y5[Deterministic eligibility]
+        Y6[AI fallback]
+    end
+
+    ST --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9
+    PA --> A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 & A10
+    SY --> Y1 & Y2 & Y3 & Y4 & Y5 & Y6
 ```

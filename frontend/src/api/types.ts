@@ -232,6 +232,30 @@ export interface AdminDriveRow {
   created_at: string;
 }
 
+export type RoundType =
+  | "online_assessment"
+  | "technical_interview"
+  | "hr_interview"
+  | "group_discussion"
+  | "other";
+
+export interface DriveRound {
+  id: string;
+  position: number;
+  round_type: RoundType;
+  title: string;
+  topics: string[];
+  scheduled_at?: string;
+}
+
+export interface DriveRoundIn {
+  position: number;
+  round_type: RoundType;
+  title: string;
+  topics: string[];
+  scheduled_at?: string;
+}
+
 export interface JDExtractionSuggestion {
   company_name?: string;
   role_title?: string;
@@ -372,9 +396,20 @@ export interface SkillGapItem {
   recommendation: string;
 }
 
+export interface RoadmapRound {
+  round_id: string;
+  position: number;
+  round_type: RoundType;
+  title: string;
+  topics: string[];
+  scheduled_at?: string;
+  focus_skills: string[];
+}
+
 export interface PreparationRoadmap {
   drive_id: string;
   skill_gaps: SkillGapItem[];
+  rounds: RoadmapRound[];
   roadmap_steps: string[];
   suggested_practice: string[];
   disclaimer: string;
