@@ -353,6 +353,30 @@ export interface PaginatedNotifications extends Pagination {
   unread_count: number;
 }
 
+// --------------------------------------------------------------- dashboard
+
+export interface DashboardDriveItem {
+  drive_id: string;
+  title: string;
+  company_name: string;
+  location?: string;
+  apply_by?: string;
+  days_left?: number;
+}
+
+export interface SkillGapCount {
+  skill: string;
+  drives: number;
+}
+
+export interface StudentDashboard {
+  eligible_open_drives: DashboardDriveItem[];
+  closing_soon: DashboardDriveItem[];
+  application_counts_by_status: Partial<Record<AppStatus, number>>;
+  total_applications: number;
+  top_skill_gaps: SkillGapCount[];
+}
+
 // ------------------------------------------------------------------ resumes
 
 export interface ResumeMetadata {
