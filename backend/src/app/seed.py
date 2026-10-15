@@ -49,7 +49,7 @@ from app.services.applications import ApplicationService
 from app.services.resumes import upload_resume
 from app.services.users import get_user_by_email, init_institution
 
-ADMIN_EMAIL = settings.seed_admin_email or "admin@kle.local"
+ADMIN_EMAIL = settings.seed_admin_email or "admin@kletech.example.edu"
 
 
 def seed_credentials() -> tuple[str, str]:
@@ -204,6 +204,26 @@ DRIVES: list[dict] = [
             {"criterion_type": "batch_years", "parameters": {"years": [2026, 2027]}},
         ],
         "required_skills": ["python", "sql", "pandas", "statistics"],
+        "rounds": [
+            {
+                "position": 1,
+                "round_type": "online_assessment",
+                "title": "Online Assessment",
+                "topics": ["python", "sql", "aptitude"],
+            },
+            {
+                "position": 2,
+                "round_type": "technical_interview",
+                "title": "Technical Interview",
+                "topics": ["pandas", "statistics", "sql"],
+            },
+            {
+                "position": 3,
+                "round_type": "hr_interview",
+                "title": "HR Interview",
+                "topics": ["communication", "teamwork"],
+            },
+        ],
     },
     {
         "company": "VoltMotive",
@@ -221,6 +241,26 @@ DRIVES: list[dict] = [
             {"criterion_type": "batch_years", "parameters": {"years": [2026]}},
         ],
         "required_skills": ["c++", "embedded systems", "git"],
+        "rounds": [
+            {
+                "position": 1,
+                "round_type": "online_assessment",
+                "title": "Online Assessment",
+                "topics": ["c++", "aptitude", "embedded systems"],
+            },
+            {
+                "position": 2,
+                "round_type": "technical_interview",
+                "title": "Technical Interview",
+                "topics": ["embedded systems", "c++", "operating systems"],
+            },
+            {
+                "position": 3,
+                "round_type": "hr_interview",
+                "title": "HR Interview",
+                "topics": ["communication"],
+            },
+        ],
     },
     {
         "company": "Pixelforge Studios",
@@ -436,7 +476,7 @@ def _ensure_company(db: Session, inst_id: str, spec: dict) -> Company:
 
 def _edu_email(spec: dict) -> str:
     first, last = spec["name"].lower().split(" ", 1)
-    return f"{first}.{last.replace(' ', '').replace('-', '')}@student.kle.local"
+    return f"{first}.{last.replace(' ', '').replace('-', '')}@student.kletech.example.edu"
 
 
 def _ensure_student(db: Session, inst_id: str, spec: dict, student_password: str) -> bool:
@@ -572,6 +612,9 @@ def _ensure_drive(
         drive.jd_text = spec["jd_text"]
         drive.jd_filename = "job-description.txt"
         drive.is_ai_extraction_pending = True
+
+    if spec.get("rounds"):
+        drive_service.replace_rounds(db, drive=drive, rounds=spec["rounds"])
 
     if drive.status == "published":
         drive_service.publish_drive(db, drive=drive)

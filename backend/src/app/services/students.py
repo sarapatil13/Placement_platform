@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -287,6 +288,104 @@ def get_drive_skill_names(db: Session, drive_id: str) -> list[str]:
     from app.db.models import DriveSkill
 
     return [row.skill.name for row in db.query(DriveSkill).filter(DriveSkill.drive_id == drive_id).all()]
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """SQLite drops tzinfo; assume such values are already UTC."""
+    if value is None or value.tzinfo is not None:
+        return value
+    return value.replace(tzinfo=UTC)
+
+
+def build_dashboard(db: Session, *, user, student: Student) -> dict:
+    """Aggregate the student landing view: eligible open drives, deadlines,
+    application status counts, and the most common missing skills."""
+    from app.db.models import (
+        DRIVE_PUBLISHED,
+        Application,
+        DriveSkill,
+        PlacementDrive,
+        Resume,
+    )
+    from app.services.eligibility import evaluate
+    from app.services.skill_matching import normalize
+
+    now = datetime.now(UTC)
+    drives = (
+        db.query(PlacementDrive)
+        .filter(
+            PlacementDrive.institution_id == student.institution_id,
+            PlacementDrive.status == DRIVE_PUBLISHED,
+        )
+        .all()
+    )
+    applied_ids = {
+        row[0]
+        for row in db.query(Application.drive_id)
+        .filter(Application.student_id == student.id)
+        .all()
+    }
+    resume = (
+        db.query(Resume)
+        .filter(Resume.student_id == student.id, Resume.is_primary.is_(True))
+        .first()
+    )
+    known_skills = {normalize(s) for s in (resume.parsed_skills if resume else [])}
+    known_skills |= {normalize(row.skill.normalized_name) for row in student.skills}
+
+    eligible_open: list[dict] = []
+    closing_soon: list[dict] = []
+    gap_counts: dict[str, int] = {}
+
+    for drive in drives:
+        apply_by = _as_utc(drive.apply_by)
+        if apply_by is not None and apply_by < now:
+            continue
+        if drive.id in applied_ids:
+            continue
+        verdict = evaluate(db, drive_id=drive.id, student=student)
+        if not (verdict.eligible and verdict.definitive):
+            continue
+
+        days_left: float | None = None
+        if apply_by is not None:
+            days_left = max(0.0, (apply_by - now).total_seconds() / 86400)
+        item = {
+            "drive_id": drive.id,
+            "title": drive.title,
+            "company_name": drive.company.name if drive.company else "",
+            "location": drive.location,
+            "apply_by": apply_by,
+            "days_left": round(days_left, 1) if days_left is not None else None,
+        }
+        eligible_open.append(item)
+        if days_left is not None and days_left <= 3:
+            closing_soon.append(item)
+
+        for row in db.query(DriveSkill).filter(DriveSkill.drive_id == drive.id).all():
+            skill_name = row.skill.name
+            if normalize(skill_name) not in known_skills:
+                gap_counts[skill_name] = gap_counts.get(skill_name, 0) + 1
+
+    eligible_open.sort(key=lambda x: (x["apply_by"] is None, x["apply_by"] or now))
+    closing_soon.sort(key=lambda x: (x["apply_by"] is None, x["apply_by"] or now))
+
+    status_counts: dict[str, int] = dict(
+        db.query(Application.status, func.count(Application.id))
+        .filter(Application.student_id == student.id)
+        .group_by(Application.status)
+        .all()
+    )
+
+    top_gaps = sorted(gap_counts.items(), key=lambda kv: (-kv[1], kv[0].lower()))[:5]
+
+    return {
+        "eligible_open_drives": eligible_open[:5],
+        "closing_soon": closing_soon,
+        "application_counts_by_status": status_counts,
+        "total_applications": sum(status_counts.values()),
+        "top_skill_gaps": [{"skill": name, "drives": count} for name, count in top_gaps],
+    }
 
 
 def _get_department(db: Session, institution_id: str, code: str) -> Department:

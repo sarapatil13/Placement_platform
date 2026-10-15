@@ -10,12 +10,20 @@ from app.api.deps import (
     get_actor_context,
     get_current_user,
     get_student_record,
+    require_student,
 )
 from app.core.config import settings
 from app.core.ratelimit import route_limit
 from app.db.models import Student
 from app.db.session import get_db
-from app.schemas.students import SkillRead, SkillUpsert, StudentDetail, StudentSelfUpdate
+from app.schemas.students import (
+    SkillRead,
+    SkillUpsert,
+    StudentDashboard,
+    StudentDetail,
+    StudentSelfUpdate,
+)
+from app.services import notifications as notif_service
 from app.services import students as student_service
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -27,6 +35,16 @@ def my_profile(
     student: Student = Depends(get_student_record),
 ) -> StudentDetail:
     return _student_to_detail(student)
+
+
+@router.get("/me/dashboard", response_model=StudentDashboard)
+def my_dashboard(
+    _current: CurrentUser = Depends(require_student),
+    student: Student = Depends(get_student_record),
+    db: Session = Depends(get_db),
+) -> StudentDashboard:
+    notif_service.ensure_deadline_reminders(db, user=student.user, student=student)
+    return StudentDashboard(**student_service.build_dashboard(db, user=student.user, student=student))
 
 
 @router.patch("/me", response_model=StudentDetail)

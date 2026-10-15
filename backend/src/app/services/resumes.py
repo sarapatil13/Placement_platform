@@ -16,7 +16,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import NotFoundError, ValidationError
-from app.db.models import AIAnalysis, DriveSkill, PlacementDrive, Resume, Student
+from app.db.models import (
+    AIAnalysis,
+    DriveRound,
+    DriveSkill,
+    PlacementDrive,
+    Resume,
+    Student,
+)
 from app.services import ai_service
 from app.services.audit import AuditContext, record
 from app.services.documents import (
@@ -26,6 +33,7 @@ from app.services.documents import (
     sha256_bytes,
 )
 from app.services.skill_matching import match_skills
+from app.services.skill_matching import normalize as normalize_skill
 
 MAX_RESUMES_PER_STUDENT = 10
 
@@ -303,6 +311,7 @@ def build_prep_roadmap(
     drive_skill_names = [row.skill.name for row in db.query(DriveSkill).filter(DriveSkill.drive_id == drive_id).all()]
     required = drive_skill_names or _skills_from_jd(drive.jd_text)
     _, _, missing = match_skills(resume_skills, required)
+    rounds = _roadmap_rounds(db, drive, missing)
 
     try:
         ai_result = ai_service.build_roadmap(list(missing), list(resume_skills), drive.title)
@@ -315,6 +324,7 @@ def build_prep_roadmap(
                 {"skill": s, "status": "missing", "recommendation": _practice_hints([s])[0]}
                 for s in sorted(missing)
             ],
+            "rounds": rounds,
             "disclaimer": "AI-generated guidance based on publicly available recruitment "
             "information; placement cell criteria always take precedence.",
         }
@@ -341,6 +351,7 @@ def build_prep_roadmap(
                 {"skill": s, "status": "missing", "recommendation": _practice_hints([s])[0]}
                 for s in sorted(missing)
             ],
+            "rounds": rounds,
             "disclaimer": "Deterministic fallback (AI unavailable).",
         }
     record(
@@ -390,6 +401,40 @@ def _persist_analysis(
 
 def _skills_from_jd(jd_text: str | None) -> list[str]:
     return _detect_skills(jd_text or "")
+
+
+def _roadmap_rounds(db: Session, drive: PlacementDrive, missing: set[str]) -> list[dict]:
+    rounds = (
+        db.query(DriveRound)
+        .filter(DriveRound.drive_id == drive.id)
+        .order_by(DriveRound.position.asc())
+        .all()
+    )
+    missing_by_norm = {normalize_skill(s): s for s in missing if s}
+    result: list[dict] = []
+    for r in rounds:
+        focus: set[str] = set()
+        for topic in r.topics or []:
+            topic_norm = normalize_skill(str(topic))
+            if topic_norm in missing_by_norm:
+                focus.add(missing_by_norm[topic_norm])
+                continue
+            for norm, original in missing_by_norm.items():
+                if norm and (norm in topic_norm or topic_norm in norm):
+                    focus.add(original)
+                    break
+        result.append(
+            {
+                "round_id": r.id,
+                "position": r.position,
+                "round_type": r.round_type,
+                "title": r.title,
+                "topics": list(r.topics or []),
+                "scheduled_at": r.scheduled_at,
+                "focus_skills": sorted(focus),
+            }
+        )
+    return result
 
 
 def _feedback_text(skill_match: float, total_required: int) -> str:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -192,3 +192,25 @@ class PaginatedStudents(BaseModel):
     total: int
     page: int
     limit: int
+
+
+class DashboardDriveItem(BaseModel):
+    drive_id: str
+    title: str
+    company_name: str
+    location: str | None = None
+    apply_by: datetime | None = None
+    days_left: float | None = None
+
+
+class SkillGapCount(BaseModel):
+    skill: str
+    drives: int
+
+
+class StudentDashboard(BaseModel):
+    eligible_open_drives: list[DashboardDriveItem] = Field(default_factory=list)
+    closing_soon: list[DashboardDriveItem] = Field(default_factory=list)
+    application_counts_by_status: dict[str, int] = Field(default_factory=dict)
+    total_applications: int = 0
+    top_skill_gaps: list[SkillGapCount] = Field(default_factory=list)

@@ -193,3 +193,35 @@ class JDUploadResponse(BaseModel):
 class EligibilityCriteriaConfirm(BaseModel):
     criteria: list[EligibilityRuleIn]
     required_skills: list[str] = Field(default_factory=list)
+
+
+class DriveRoundIn(BaseModel):
+    position: int = Field(ge=0)
+    round_type: str = Field(max_length=40)
+    title: str = Field(max_length=150)
+    topics: list[str] = Field(default_factory=list)
+    scheduled_at: datetime | None = None
+
+    @field_validator("round_type")
+    @classmethod
+    def _valid_round_type(cls, v: str) -> str:
+        from app.db.models import ROUND_TYPES
+
+        if v not in ROUND_TYPES:
+            raise ValueError(f"Unknown round type '{v}'.")
+        return v
+
+
+class DriveRoundOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    position: int
+    round_type: str
+    title: str
+    topics: list[str] = Field(default_factory=list)
+    scheduled_at: datetime | None = None
+
+
+class DriveRoundsReplace(BaseModel):
+    rounds: list[DriveRoundIn] = Field(default_factory=list)

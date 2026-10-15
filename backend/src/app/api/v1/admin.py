@@ -24,6 +24,7 @@ from app.core.rbac import Permission
 from app.db.models import (
     Application,
     Company,
+    DriveRound,
     PlacementDrive,
     Student,
     User,
@@ -478,6 +479,37 @@ def evaluate_drive(
     }
 
 
+@router.get("/drives/{drive_id}/rounds", response_model=dict)
+def list_drive_rounds(
+    drive_id: str,
+    current: CurrentUser = Depends(require_permission(Permission.MANAGE_DRIVES)),
+    db: Session = Depends(get_db),
+) -> dict:
+    drive = drive_service.get_drive(db, drive_id, current.institution_id)
+    rounds = drive_service.list_rounds(db, drive=drive)
+    return {"drive_id": drive.id, "rounds": [_round_read(r) for r in rounds]}
+
+
+@router.put("/drives/{drive_id}/rounds", response_model=dict)
+def set_drive_rounds(
+    drive_id: str,
+    body: dict,
+    request: Request,
+    current: CurrentUser = Depends(require_permission(Permission.MANAGE_DRIVES)),
+    db: Session = Depends(get_db),
+) -> dict:
+    drive = drive_service.get_drive(db, drive_id, current.institution_id)
+    rounds = _validate_rounds(body.get("rounds", []))
+    drive_service.replace_rounds(
+        db,
+        drive=drive,
+        rounds=rounds,
+        actor_ctx=get_actor_context(request, current),
+    )
+    saved = drive_service.list_rounds(db, drive=drive)
+    return {"drive_id": drive.id, "rounds": [_round_read(r) for r in saved]}
+
+
 # --------------------------------------------------------------------------- #
 # Applications under admin
 # --------------------------------------------------------------------------- #
@@ -615,6 +647,47 @@ def _validate_criteria(criteria: list) -> None:
     for c in criteria:
         if not c.get("criterion_type"):
             raise ValidationError("Each criterion needs a criterion_type.")
+
+
+def _validate_rounds(rounds: list) -> list[dict]:
+    from app.db.models import ROUND_TYPES
+
+    if not isinstance(rounds, list):
+        raise ValidationError("rounds must be a list.")
+    validated: list[dict] = []
+    for index, r in enumerate(rounds):
+        if not isinstance(r, dict):
+            raise ValidationError("Each round must be an object.")
+        round_type = r.get("round_type")
+        if round_type not in ROUND_TYPES:
+            raise ValidationError(f"Unknown round type '{round_type}'.")
+        title = (r.get("title") or "").strip()
+        if not title:
+            raise ValidationError("Each round needs a title.")
+        topics = r.get("topics") or []
+        if not isinstance(topics, list):
+            raise ValidationError("Round topics must be a list of strings.")
+        validated.append(
+            {
+                "position": int(r.get("position", index)),
+                "round_type": round_type,
+                "title": title,
+                "topics": [str(t) for t in topics],
+                "scheduled_at": _dt(r.get("scheduled_at")),
+            }
+        )
+    return validated
+
+
+def _round_read(round_: DriveRound) -> dict:
+    return {
+        "id": round_.id,
+        "position": round_.position,
+        "round_type": round_.round_type,
+        "title": round_.title,
+        "topics": list(round_.topics or []),
+        "scheduled_at": round_.scheduled_at,
+    }
 
 
 def _dt(value) -> datetime | None:

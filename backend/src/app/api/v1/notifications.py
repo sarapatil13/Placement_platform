@@ -14,6 +14,7 @@ from app.api.deps import (
 )
 from app.core.config import settings
 from app.core.ratelimit import route_limit
+from app.db.models import Student
 from app.db.session import get_db
 from app.schemas.applications import NotificationMarkRead, NotificationRead, PaginatedNotifications
 from app.services import notifications as notif_service
@@ -29,6 +30,10 @@ def list_notifications(
     pagination: Pagination = Depends(get_pagination),
     unread_only: bool = False,
 ) -> PaginatedNotifications:
+    if current.role == "student":
+        student = db.query(Student).filter(Student.user_id == current.user_id).first()
+        if student is not None:
+            notif_service.ensure_deadline_reminders(db, user=student.user, student=student)
     rows, total, unread_count = notif_service.list_for_user(
         db,
         user_id=current.user_id,

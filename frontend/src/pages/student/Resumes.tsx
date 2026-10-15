@@ -267,6 +267,17 @@ export default function Resumes() {
                   ))}
                 </>
               ) : null}
+              {roadmap.rounds.length > 0 ? (
+                <>
+                  <strong>Rounds &amp; focus areas</strong>
+                  {roadmap.rounds.map((r) => (
+                    <div key={r.round_id}>
+                      {r.position}. {r.title}
+                      {r.focus_skills.length > 0 ? ` — focus: ${r.focus_skills.join(", ")}` : ""}
+                    </div>
+                  ))}
+                </>
+              ) : null}
               <p className="rule-note mb-0">{roadmap.disclaimer}</p>
             </div>
           ) : null}

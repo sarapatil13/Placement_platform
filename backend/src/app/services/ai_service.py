@@ -15,6 +15,7 @@ Providers:
 from __future__ import annotations
 
 import json
+import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -130,41 +131,125 @@ class HeuristicAIService(AIService):
     name = "heuristic"
     model_name = "deterministic-extractor-v1"
 
-    _COMMON_SKILLS = [
+    # Surface forms of common technical skills. Matching is whole-token (see
+    # `_find_skills`), so short ambiguous strings like bare "go"/"r" are omitted
+    # and "java" never matches inside "javascript".
+    _COMMON_SKILLS: tuple[str, ...] = (
         "python",
         "java",
+        "javascript",
+        "typescript",
         "c",
         "c++",
         "cpp",
-        "javascript",
-        "typescript",
+        "c#",
+        ".net",
+        "golang",
+        "rust",
+        "php",
+        "ruby",
+        "kotlin",
+        "swift",
+        "scala",
+        "dart",
         "react",
+        "react native",
+        "next.js",
+        "vue",
+        "angular",
         "node.js",
         "nodejs",
         "express",
+        "django",
+        "flask",
+        "fastapi",
+        "spring",
+        "spring boot",
+        "laravel",
+        "rails",
+        "hibernate",
+        "redux",
+        "jquery",
+        "tailwind",
+        "bootstrap",
+        "sass",
+        "html",
+        "css",
+        "graphql",
+        "rest",
+        "rest api",
+        "microservices",
         "sql",
         "mysql",
         "postgresql",
+        "sqlite",
         "mongodb",
-        "html",
-        "css",
+        "redis",
+        "kafka",
+        "spark",
+        "hadoop",
+        "airflow",
+        "elasticsearch",
         "git",
         "github",
+        "gitlab",
+        "bitbucket",
         "docker",
         "kubernetes",
+        "terraform",
+        "ansible",
+        "jenkins",
+        "ci cd",
+        "linux",
+        "bash",
+        "shell",
         "aws",
         "gcp",
         "azure",
         "machine learning",
         "deep learning",
+        "artificial intelligence",
+        "nlp",
+        "computer vision",
+        "tensorflow",
+        "pytorch",
+        "keras",
+        "scikit learn",
+        "pandas",
+        "numpy",
+        "matplotlib",
+        "seaborn",
+        "statistics",
+        "power bi",
+        "tableau",
+        "microsoft excel",
         "data structures",
         "algorithms",
         "dbms",
         "computer networks",
-        "oops",
         "operating systems",
-        "django",
-    ]
+        "oops",
+        "object oriented programming",
+        "system design",
+        "cypress",
+        "jest",
+        "pytest",
+        "selenium",
+        "postman",
+        "figma",
+        "android",
+        "ios",
+        "flutter",
+    )
+
+    def _find_skills(self, lowered_text: str) -> list[str]:
+        """Return the known skills present as whole tokens in ``lowered_text``."""
+        found: list[str] = []
+        for skill in self._COMMON_SKILLS:
+            pattern = r"(?<![a-z0-9])" + re.escape(skill) + r"(?![a-z0-9])"
+            if re.search(pattern, lowered_text):
+                found.append(skill)
+        return found
 
     def complete(self, schema: type[T], prompt: str, system: str | None = None) -> AIResult[T]:
         from typing import cast
@@ -197,7 +282,7 @@ class HeuristicAIService(AIService):
     def _extract_jd(self, prompt: str) -> JDExtractionSchema:
         text = self._last_user_text(prompt)
         lowered = text.lower()
-        skills = [s for s in self._COMMON_SKILLS if s in lowered]
+        skills = self._find_skills(lowered)
         # crude CGPA/backlog hints only; these are *suggestions* the admin confirms.
         cgpa = None
         for token in ("cgpa", "aggregate"):
@@ -231,15 +316,13 @@ class HeuristicAIService(AIService):
 
     def _extract_resume_skills(self, prompt: str) -> ResumeSkillExtractionSchema:
         text = self._last_user_text(prompt).lower()
-        skills = [s for s in self._COMMON_SKILLS if s in text]
+        skills = self._find_skills(text)
         return ResumeSkillExtractionSchema(skills=skills[:30])
 
     def _compare_skills(self, prompt: str) -> SkillComparisonSchema:
         # Deterministic fallback: recompute from the prompt, which embeds the
         # resume skills and required skills in JSON. If they are present, mirror
         # the server-side matcher so the stored analysis is internally consistent.
-        import re
-
         m_resume = re.search(r'"resume_skills"\s*:\s*(\[[^\]]*\])', prompt)
         m_required = re.search(r'"required_skills"\s*:\s*(\[[^\]]*\])', prompt)
         if m_resume and m_required:
@@ -267,9 +350,6 @@ class HeuristicAIService(AIService):
         )
 
     def _roadmap(self, prompt: str) -> PreparationRoadmapSchema:
-
-        import re
-
         m_missing = re.search(r'"missing_skills"\s*:\s*(\[[^\]]*\])', prompt)
         missing: list[str] = []
         if m_missing:

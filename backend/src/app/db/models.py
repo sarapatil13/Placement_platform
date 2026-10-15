@@ -49,6 +49,19 @@ DRIVE_CLOSED = "closed"
 DRIVE_ARCHIVED = "archived"
 DRIVE_STATUSES = (DRIVE_DRAFT, DRIVE_PUBLISHED, DRIVE_CLOSED, DRIVE_ARCHIVED)
 
+ROUND_ONLINE_ASSESSMENT = "online_assessment"
+ROUND_TECHNICAL_INTERVIEW = "technical_interview"
+ROUND_HR_INTERVIEW = "hr_interview"
+ROUND_GROUP_DISCUSSION = "group_discussion"
+ROUND_OTHER = "other"
+ROUND_TYPES = (
+    ROUND_ONLINE_ASSESSMENT,
+    ROUND_TECHNICAL_INTERVIEW,
+    ROUND_HR_INTERVIEW,
+    ROUND_GROUP_DISCUSSION,
+    ROUND_OTHER,
+)
+
 APP_APPLIED = "applied"
 APP_IN_REVIEW = "in_review"
 APP_SHORTLISTED = "shortlisted"
@@ -331,6 +344,9 @@ class PlacementDrive(Base):
     drive_skills: Mapped[list[DriveSkill]] = relationship(
         back_populates="drive", cascade="all, delete-orphan"
     )
+    rounds: Mapped[list[DriveRound]] = relationship(
+        back_populates="drive", cascade="all, delete-orphan", order_by="DriveRound.position"
+    )
     applications: Mapped[list[Application]] = relationship(back_populates="drive")
 
 
@@ -452,6 +468,31 @@ class DriveSkill(Base):
 
     drive: Mapped[PlacementDrive] = relationship(back_populates="drive_skills")
     skill: Mapped[Skill] = relationship(back_populates="drive_skills")
+
+
+class DriveRound(Base):
+    """Recruitment round for a placement drive."""
+
+    __tablename__ = "drive_rounds"
+    __table_args__ = (
+        UniqueConstraint("drive_id", "position", name="uq_drive_rounds_drive_id_position"),
+        Index("ix_drive_rounds_drive_id", "drive_id"),
+    )
+
+    id: Mapped[str] = id_column()
+    institution_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False
+    )
+    drive_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("placement_drives.id", ondelete="CASCADE"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    round_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(150), nullable=False)
+    topics: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    drive: Mapped[PlacementDrive] = relationship(back_populates="rounds")
 
 
 class Resume(Base):
@@ -717,12 +758,19 @@ __all__ = [
     "DRIVE_DRAFT",
     "DRIVE_PUBLISHED",
     "DriveSkill",
+    "DriveRound",
     "EligibilityCriterion",
     "Institution",
     "Notification",
     "PlacementDrive",
     "Resume",
     "RevokedRefreshToken",
+    "ROUND_GROUP_DISCUSSION",
+    "ROUND_HR_INTERVIEW",
+    "ROUND_ONLINE_ASSESSMENT",
+    "ROUND_OTHER",
+    "ROUND_TECHNICAL_INTERVIEW",
+    "ROUND_TYPES",
     "Skill",
     "Student",
     "StudentSkill",

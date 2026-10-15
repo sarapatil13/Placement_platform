@@ -57,9 +57,20 @@ class SkillGapItem(BaseModel):
     recommendation: str
 
 
+class RoadmapRound(BaseModel):
+    round_id: str
+    position: int
+    round_type: str
+    title: str
+    topics: list[str] = Field(default_factory=list)
+    scheduled_at: datetime | None = None
+    focus_skills: list[str] = Field(default_factory=list)
+
+
 class PreparationRoadmap(BaseModel):
     drive_id: str
     skill_gaps: list[SkillGapItem] = Field(default_factory=list)
+    rounds: list[RoadmapRound] = Field(default_factory=list)
     roadmap_steps: list[str] = Field(default_factory=list)
     suggested_practice: list[str] = Field(default_factory=list)
     disclaimer: str
